@@ -80,7 +80,8 @@ parser.add_argument('--seed', default=123456, type=int, help='Seed to generators
 parser.add_argument('--opt-level', type=str)
 parser.add_argument('--keep-batchnorm-fp32', type=str, default=None)
 parser.add_argument('--loss-scale', type=str, default=None)
-
+parser.add_argument('--weights', default='', help='Continue from checkpoint model')
+#parser.add_argument('--gpu-rank', default=0,help='If using distributed parallel for multi-gpu, sets the GPU for the process')
 torch.manual_seed(123456)
 torch.cuda.manual_seed_all(123456)
 
@@ -117,7 +118,8 @@ if __name__ == '__main__':
     np.random.seed(args.seed)
     random.seed(args.seed)
 
-    device = torch.device("cuda" if args.cuda else "cpu")
+    device = torch.device("cuda:"+str(args.gpu_rank) if args.cuda else "cpu")
+    torch.cuda.set_device(int(args.gpu_rank))
     args.distributed = args.world_size > 1
     main_proc = True
     device = torch.device("cuda" if args.cuda else "cpu")
@@ -202,6 +204,8 @@ if __name__ == '__main__':
         print("Shuffling batches for the following epochs")
         train_sampler.shuffle(start_epoch)
 
+    try:model.load_state_dict(torch.load(args.weights)['state_dict'], strict = True)
+    except:pass
     model = model.to(device)
     parameters = model.parameters()
     optimizer = torch.optim.SGD(parameters, lr=args.lr,
@@ -323,8 +327,11 @@ if __name__ == '__main__':
             }
 
         if main_proc and args.checkpoint:
-            file_path = '%s/deepspeech_%d.pth.tar' % (save_folder, epoch + 1)
-            torch.save(DeepSpeech.serialize(model, optimizer=optimizer, epoch=epoch, loss_results=loss_results,
+            file_path = '%s/deepspeech_%d.pth' % (save_folder, epoch + 1)
+            try:torch.save(DeepSpeech.serialize(model.module, optimizer=optimizer, epoch=epoch, loss_results=loss_results,
+                                            wer_results=wer_results, cer_results=cer_results),
+                       file_path)
+            except: torch.save(DeepSpeech.serialize(model, optimizer=optimizer, epoch=epoch, loss_results=loss_results,
                                             wer_results=wer_results, cer_results=cer_results),
                        file_path)
         # anneal lr
@@ -334,9 +341,12 @@ if __name__ == '__main__':
 
         if main_proc and (best_wer is None or best_wer > wer):
             print("Found better validated model, saving to %s" % args.model_path)
-            torch.save(DeepSpeech.serialize(model, optimizer=optimizer, epoch=epoch, loss_results=loss_results,
-                                            wer_results=wer_results, cer_results=cer_results)
-                       , args.model_path)
+            try:torch.save(DeepSpeech.serialize(model.module, optimizer=optimizer, epoch=epoch, loss_results=loss_results,
+                                            wer_results=wer_results, cer_results=cer_results),
+                       args.model_path)
+            except: torch.save(DeepSpeech.serialize(model, optimizer=optimizer, epoch=epoch, loss_results=loss_results,
+                                            wer_results=wer_results, cer_results=cer_results),
+                       args.model_path)
             best_wer = wer
             avg_loss = 0
 

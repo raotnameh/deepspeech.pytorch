@@ -248,7 +248,6 @@ class DeepSpeech(nn.Module):
     def serialize(model, optimizer=None, epoch=None, iteration=None, loss_results=None,
                   cer_results=None, wer_results=None, avg_loss=None, meta=None):
         package = {
-            'version': model.version,
             'hidden_size': model.hidden_size,
             'hidden_layers': model.hidden_layers,
             'rnn_type': supported_rnns_inv.get(model.rnn_type, model.rnn_type.__name__.lower()),
